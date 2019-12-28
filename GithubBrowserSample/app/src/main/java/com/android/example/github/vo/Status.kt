@@ -26,5 +26,6 @@ package com.android.example.github.vo
 enum class Status {
     SUCCESS,
     ERROR,
-    LOADING
+    LOADING,
+    NONE
 }

@@ -73,9 +73,11 @@ dependencies {
     implementation deps.support.design
     implementation deps.navigation.fragment_ktx
     implementation deps.room.runtime
+    implementation deps.room.ktx
     implementation deps.lifecycle.runtime
     implementation deps.lifecycle.extensions
     implementation deps.lifecycle.java8
+    implementation deps.lifecycle.ktx
     implementation deps.retrofit.runtime
     implementation deps.retrofit.gson
     implementation deps.glide.runtime
@@ -85,6 +87,10 @@ dependencies {
     implementation deps.dagger.android_support
     implementation deps.constraint_layout
     implementation deps.kotlin.stdlib
+
+    implementation deps.coroutines.core
+    implementation deps.coroutines.android
+    implementation deps.viewModel.ktx
 
     implementation deps.timber
 
@@ -97,6 +103,7 @@ dependencies {
     testImplementation deps.mock_web_server
     testImplementation deps.arch_core.testing
     testImplementation deps.mockito.core
+    testImplementation deps.coroutines.testing
 
     androidTestImplementation deps.atsl.runner
     androidTestImplementation deps.atsl.rules

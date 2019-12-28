@@ -27,8 +27,12 @@ import com.android.example.github.viewmodel.GithubViewModelFactory
 import dagger.Binds
 import dagger.Module
 import dagger.multibindings.IntoMap
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 
 @Suppress("unused")
+@ExperimentalCoroutinesApi
+@FlowPreview
 @Module
 abstract class ViewModelModule {
     @Binds

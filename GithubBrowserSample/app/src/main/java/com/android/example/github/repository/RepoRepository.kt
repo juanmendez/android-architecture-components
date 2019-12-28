@@ -16,21 +16,22 @@
 
 package com.android.example.github.repository
 
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.Transformations
-import com.android.example.github.AppExecutors
 import com.android.example.github.api.ApiSuccessResponse
 import com.android.example.github.api.GithubService
 import com.android.example.github.api.RepoSearchResponse
 import com.android.example.github.db.GithubDb
 import com.android.example.github.db.RepoDao
 import com.android.example.github.testing.OpenForTesting
-import com.android.example.github.util.AbsentLiveData
 import com.android.example.github.util.RateLimiter
 import com.android.example.github.vo.Contributor
 import com.android.example.github.vo.Repo
 import com.android.example.github.vo.RepoSearchResult
 import com.android.example.github.vo.Resource
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapMerge
+import kotlinx.coroutines.flow.flow
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,8 +45,9 @@ import javax.inject.Singleton
  */
 @Singleton
 @OpenForTesting
+@FlowPreview
+@ExperimentalCoroutinesApi
 class RepoRepository @Inject constructor(
-    private val appExecutors: AppExecutors,
     private val db: GithubDb,
     private val repoDao: RepoDao,
     private val githubService: GithubService
@@ -53,9 +55,9 @@ class RepoRepository @Inject constructor(
 
     private val repoListRateLimit = RateLimiter<String>(10, TimeUnit.MINUTES)
 
-    fun loadRepos(owner: String): LiveData<Resource<List<Repo>>> {
-        return object : NetworkBoundResource<List<Repo>, List<Repo>>(appExecutors) {
-            override fun saveCallResult(item: List<Repo>) {
+    suspend fun loadRepos(owner: String): Flow<Resource<List<Repo>>> {
+        return object : NetworkBoundResource<List<Repo>, List<Repo>>() {
+            override suspend fun saveCallResult(item: List<Repo>) {
                 repoDao.insertRepos(item)
             }
 
@@ -65,17 +67,17 @@ class RepoRepository @Inject constructor(
 
             override fun loadFromDb() = repoDao.loadRepositories(owner)
 
-            override fun createCall() = githubService.getRepos(owner)
+            override suspend fun createCall() = githubService.getRepos(owner)
 
             override fun onFetchFailed() {
                 repoListRateLimit.reset(owner)
             }
-        }.asLiveData()
+        }.asFlow()
     }
 
-    fun loadRepo(owner: String, name: String): LiveData<Resource<Repo>> {
-        return object : NetworkBoundResource<Repo, Repo>(appExecutors) {
-            override fun saveCallResult(item: Repo) {
+    suspend fun loadRepo(owner: String, name: String): Flow<Resource<Repo>> {
+        return object : NetworkBoundResource<Repo, Repo>() {
+            override suspend fun saveCallResult(item: Repo) {
                 repoDao.insert(item)
             }
 
@@ -86,16 +88,17 @@ class RepoRepository @Inject constructor(
                 name = name
             )
 
-            override fun createCall() = githubService.getRepo(
+            override suspend fun createCall() = githubService.getRepo(
                 owner = owner,
                 name = name
             )
-        }.asLiveData()
+        }.asFlow()
     }
 
-    fun loadContributors(owner: String, name: String): LiveData<Resource<List<Contributor>>> {
-        return object : NetworkBoundResource<List<Contributor>, List<Contributor>>(appExecutors) {
-            override fun saveCallResult(item: List<Contributor>) {
+    suspend fun loadContributors(owner: String,
+                                 name: String): Flow<Resource<List<Contributor>>> {
+        return object : NetworkBoundResource<List<Contributor>, List<Contributor>>() {
+            override suspend fun saveCallResult(item: List<Contributor>) {
                 item.forEach {
                     it.repoName = name
                     it.repoOwner = owner
@@ -121,24 +124,22 @@ class RepoRepository @Inject constructor(
 
             override fun loadFromDb() = repoDao.loadContributors(owner, name)
 
-            override fun createCall() = githubService.getContributors(owner, name)
-        }.asLiveData()
+            override suspend fun createCall() = githubService.getContributors(owner, name)
+        }.asFlow()
     }
 
-    fun searchNextPage(query: String): LiveData<Resource<Boolean>> {
-        val fetchNextSearchPageTask = FetchNextSearchPageTask(
+    suspend fun searchNextPage(query: String): Flow<Resource<Boolean>> {
+        return FetchNextSearchPageTask(
             query = query,
             githubService = githubService,
             db = db
-        )
-        appExecutors.networkIO().execute(fetchNextSearchPageTask)
-        return fetchNextSearchPageTask.liveData
+        ).run()
     }
 
-    fun search(query: String): LiveData<Resource<List<Repo>>> {
-        return object : NetworkBoundResource<List<Repo>, RepoSearchResponse>(appExecutors) {
+    suspend fun search(query: String): Flow<Resource<List<Repo>>> {
+        return object : NetworkBoundResource<List<Repo>, RepoSearchResponse>() {
 
-            override fun saveCallResult(item: RepoSearchResponse) {
+            override suspend fun saveCallResult(item: RepoSearchResponse) {
                 val repoIds = item.items.map { it.id }
                 val repoSearchResult = RepoSearchResult(
                     query = query,
@@ -146,36 +147,37 @@ class RepoRepository @Inject constructor(
                     totalCount = item.total,
                     next = item.nextPage
                 )
-                db.beginTransaction()
-                try {
+
+                db.runInTransaction {
                     repoDao.insertRepos(item.items)
                     repoDao.insert(repoSearchResult)
-                    db.setTransactionSuccessful()
-                } finally {
-                    db.endTransaction()
                 }
             }
 
-            override fun shouldFetch(data: List<Repo>?) = data == null
+            override fun shouldFetch(data: List<Repo>?): Boolean {
+                return data == null || data.isEmpty()
+            }
 
-            override fun loadFromDb(): LiveData<List<Repo>> {
-                return Transformations.switchMap(repoDao.search(query)) { searchData ->
+            override fun loadFromDb(): Flow<List<Repo>> {
+                return repoDao.search(query).flatMapMerge { searchData ->
                     if (searchData == null) {
-                        AbsentLiveData.create()
+                        flow {
+                            emit(listOf())
+                        }
                     } else {
                         repoDao.loadOrdered(searchData.repoIds)
                     }
                 }
             }
 
-            override fun createCall() = githubService.searchRepos(query)
+            override suspend fun createCall() = githubService.searchRepos(query)
 
             override fun processResponse(response: ApiSuccessResponse<RepoSearchResponse>)
-                    : RepoSearchResponse {
+                : RepoSearchResponse {
                 val body = response.body
                 body.nextPage = response.nextPage
                 return body
             }
-        }.asLiveData()
+        }.asFlow()
     }
 }

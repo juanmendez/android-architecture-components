@@ -16,16 +16,16 @@
 
 package com.android.example.github.ui.user
 
-import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProviders
-import androidx.databinding.DataBindingComponent
-import androidx.databinding.DataBindingUtil
 import android.os.Bundle
-import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.databinding.DataBindingComponent
+import androidx.databinding.DataBindingUtil
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProviders
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import com.android.example.github.AppExecutors
@@ -37,9 +37,13 @@ import com.android.example.github.testing.OpenForTesting
 import com.android.example.github.ui.common.RepoListAdapter
 import com.android.example.github.ui.common.RetryCallback
 import com.android.example.github.util.autoCleared
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import javax.inject.Inject
 
 @OpenForTesting
+@ExperimentalCoroutinesApi
+@FlowPreview
 class UserFragment : Fragment(), Injectable {
     @Inject
     lateinit var viewModelFactory: ViewModelProvider.Factory
@@ -79,7 +83,7 @@ class UserFragment : Fragment(), Injectable {
         userViewModel.setLogin(params.login)
 
         binding.user = userViewModel.user
-        binding.setLifecycleOwner(viewLifecycleOwner)
+        binding.lifecycleOwner = viewLifecycleOwner
         val rvAdapter = RepoListAdapter(
             dataBindingComponent = dataBindingComponent,
             appExecutors = appExecutors,
@@ -90,6 +94,7 @@ class UserFragment : Fragment(), Injectable {
         binding.repoList.adapter = rvAdapter
         this.adapter = rvAdapter
         initRepoList()
+        userViewModel.onCreate()
     }
 
     private fun initRepoList() {

@@ -20,6 +20,8 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Transformations
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.asFlow
+import androidx.lifecycle.viewModelScope
 import com.android.example.github.repository.RepoRepository
 import com.android.example.github.repository.UserRepository
 import com.android.example.github.testing.OpenForTesting
@@ -27,30 +29,50 @@ import com.android.example.github.util.AbsentLiveData
 import com.android.example.github.vo.Repo
 import com.android.example.github.vo.Resource
 import com.android.example.github.vo.User
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flatMapMerge
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @OpenForTesting
+@FlowPreview
+@ExperimentalCoroutinesApi
 class UserViewModel
-@Inject constructor(userRepository: UserRepository, repoRepository: RepoRepository) : ViewModel() {
+@Inject constructor(
+    private val userRepository: UserRepository,
+    private val repoRepository: RepoRepository
+) : ViewModel() {
     private val _login = MutableLiveData<String>()
     val login: LiveData<String>
         get() = _login
-    val repositories: LiveData<Resource<List<Repo>>> = Transformations
-        .switchMap(_login) { login ->
-            if (login == null) {
-                AbsentLiveData.create()
-            } else {
+
+    private val _repositories = MutableLiveData<Resource<List<Repo>>>()
+    val repositories: LiveData<Resource<List<Repo>>>
+        get() = _repositories
+
+    private val _user = MutableLiveData<Resource<User>>()
+    val user: LiveData<Resource<User>>
+        get() = _user
+
+    fun onCreate() {
+        viewModelScope.launch {
+            _login.asFlow().flatMapMerge {login ->
                 repoRepository.loadRepos(login)
+            }.collect {
+                _repositories.value = it
             }
         }
-    val user: LiveData<Resource<User>> = Transformations
-        .switchMap(_login) { login ->
-            if (login == null) {
-                AbsentLiveData.create()
-            } else {
+
+        viewModelScope.launch {
+            _login.asFlow().flatMapMerge {login ->
                 userRepository.loadUser(login)
+            }.collect {
+                _user.value = it
             }
         }
+    }
 
     fun setLogin(login: String?) {
         if (_login.value != login) {

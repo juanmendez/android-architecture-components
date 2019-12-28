@@ -16,17 +16,18 @@
 
 package com.android.example.github.db
 
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.Transformations
+import android.util.SparseIntArray
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import android.util.SparseIntArray
 import com.android.example.github.testing.OpenForTesting
 import com.android.example.github.vo.Contributor
 import com.android.example.github.vo.Repo
 import com.android.example.github.vo.RepoSearchResult
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.transformLatest
 import java.util.Collections
 
 /**
@@ -34,6 +35,7 @@ import java.util.Collections
  */
 @Dao
 @OpenForTesting
+@ExperimentalCoroutinesApi
 abstract class RepoDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -49,7 +51,7 @@ abstract class RepoDao {
     abstract fun createRepoIfNotExists(repo: Repo): Long
 
     @Query("SELECT * FROM repo WHERE owner_login = :ownerLogin AND name = :name")
-    abstract fun load(ownerLogin: String, name: String): LiveData<Repo>
+    abstract fun load(ownerLogin: String, name: String): Flow<Repo>
 
     @Query(
         """
@@ -57,7 +59,7 @@ abstract class RepoDao {
         WHERE repoName = :name AND repoOwner = :owner
         ORDER BY contributions DESC"""
     )
-    abstract fun loadContributors(owner: String, name: String): LiveData<List<Contributor>>
+    abstract fun loadContributors(owner: String, name: String): Flow<List<Contributor>>
 
     @Query(
         """
@@ -65,31 +67,33 @@ abstract class RepoDao {
         WHERE owner_login = :owner
         ORDER BY stars DESC"""
     )
-    abstract fun loadRepositories(owner: String): LiveData<List<Repo>>
+    abstract fun loadRepositories(owner: String): Flow<List<Repo>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract fun insert(result: RepoSearchResult)
 
     @Query("SELECT * FROM RepoSearchResult WHERE `query` = :query")
-    abstract fun search(query: String): LiveData<RepoSearchResult>
+    abstract fun search(query: String): Flow<RepoSearchResult?>
 
-    fun loadOrdered(repoIds: List<Int>): LiveData<List<Repo>> {
+    suspend fun loadOrdered(repoIds: List<Int>): Flow<List<Repo>> {
         val order = SparseIntArray()
         repoIds.withIndex().forEach {
             order.put(it.value, it.index)
         }
-        return Transformations.map(loadById(repoIds)) { repositories ->
+
+        return loadById(repoIds).transformLatest { repositories ->
             Collections.sort(repositories) { r1, r2 ->
                 val pos1 = order.get(r1.id)
                 val pos2 = order.get(r2.id)
                 pos1 - pos2
             }
-            repositories
+
+            emit(repositories)
         }
     }
 
     @Query("SELECT * FROM Repo WHERE id in (:repoIds)")
-    protected abstract fun loadById(repoIds: List<Int>): LiveData<List<Repo>>
+    protected abstract fun loadById(repoIds: List<Int>): Flow<List<Repo>>
 
     @Query("SELECT * FROM RepoSearchResult WHERE `query` = :query")
     abstract fun findSearchResult(query: String): RepoSearchResult?

@@ -81,6 +81,7 @@ class RepoFragment : Fragment(), Injectable {
             container,
             false
         )
+
         dataBinding.retryCallback = object : RetryCallback {
             override fun retry() {
                 repoViewModel.retry()
@@ -105,6 +106,8 @@ class RepoFragment : Fragment(), Injectable {
         this.adapter = adapter
         binding.contributorList.adapter = adapter
         initContributorList(repoViewModel)
+
+        repoViewModel.onCreate()
     }
 
     /**

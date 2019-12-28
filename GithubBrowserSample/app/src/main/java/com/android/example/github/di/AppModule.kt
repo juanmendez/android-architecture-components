@@ -22,13 +22,17 @@ import com.android.example.github.api.GithubService
 import com.android.example.github.db.GithubDb
 import com.android.example.github.db.RepoDao
 import com.android.example.github.db.UserDao
-import com.android.example.github.util.LiveDataCallAdapterFactory
+import com.android.example.github.util.FlowCallAdapterFactory
 import dagger.Module
 import dagger.Provides
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Singleton
 
+@FlowPreview
+@ExperimentalCoroutinesApi
 @Module(includes = [ViewModelModule::class])
 class AppModule {
     @Singleton
@@ -37,7 +41,7 @@ class AppModule {
         return Retrofit.Builder()
             .baseUrl("https://api.github.com/")
             .addConverterFactory(GsonConverterFactory.create())
-            .addCallAdapterFactory(LiveDataCallAdapterFactory())
+            .addCallAdapterFactory(FlowCallAdapterFactory())
             .build()
             .create(GithubService::class.java)
     }
@@ -46,7 +50,7 @@ class AppModule {
     @Provides
     fun provideDb(app: Application): GithubDb {
         return Room
-            .databaseBuilder(app, GithubDb::class.java, "github.db")
+            .inMemoryDatabaseBuilder(app, GithubDb::class.java)
             .fallbackToDestructiveMigration()
             .build()
     }

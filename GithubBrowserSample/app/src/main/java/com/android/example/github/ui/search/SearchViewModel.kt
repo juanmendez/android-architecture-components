@@ -17,38 +17,62 @@
 package com.android.example.github.ui.search
 
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.Observer
-import androidx.lifecycle.Transformations
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.asFlow
+import androidx.lifecycle.viewModelScope
 import com.android.example.github.repository.RepoRepository
 import com.android.example.github.testing.OpenForTesting
-import com.android.example.github.util.AbsentLiveData
+import com.android.example.github.util.SingleFlowSource
 import com.android.example.github.vo.Repo
 import com.android.example.github.vo.Resource
 import com.android.example.github.vo.Status
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import java.util.Locale
 import javax.inject.Inject
+import kotlin.coroutines.CoroutineContext
 
 @OpenForTesting
-class SearchViewModel @Inject constructor(repoRepository: RepoRepository) : ViewModel() {
+@ExperimentalCoroutinesApi
+@FlowPreview
+class SearchViewModel @Inject constructor(private val repoRepository: RepoRepository) :
+    ViewModel() {
 
-    private val _query = MutableLiveData<String>()
-    private val nextPageHandler = NextPageHandler(repoRepository)
+    private val _query = MediatorLiveData<String>()
+    private val nextPageHandler = NextPageHandler(repoRepository, viewModelScope.coroutineContext)
 
-    val query : LiveData<String> = _query
+    val query: LiveData<String> = _query
 
-    val results: LiveData<Resource<List<Repo>>> = Transformations
-        .switchMap(_query) { search ->
-            if (search.isNullOrBlank()) {
-                AbsentLiveData.create()
+    private val _results = SingleFlowSource<Resource<List<Repo>>>()
+    val results: LiveData<Resource<List<Repo>>>
+        get() = _results.asLiveData
+
+    val loadMoreStatus: LiveData<LoadMoreState>
+        get() = nextPageHandler.loadMoreState
+
+    init {
+        onCreate()
+    }
+
+    private fun onCreate() = viewModelScope.launch {
+        _query.asFlow().collect { search ->
+
+            _results.asFlow = if (search.isNullOrBlank()) {
+                flow {
+                    emit(Resource.success(listOf()))
+                }
             } else {
                 repoRepository.search(search)
             }
         }
-
-    val loadMoreStatus: LiveData<LoadMoreState>
-        get() = nextPageHandler.loadMoreState
+    }
 
     fun setQuery(originalInput: String) {
         val input = originalInput.toLowerCase(Locale.getDefault()).trim()
@@ -86,8 +110,11 @@ class SearchViewModel @Inject constructor(repoRepository: RepoRepository) : View
             }
     }
 
-    class NextPageHandler(private val repository: RepoRepository) : Observer<Resource<Boolean>> {
-        private var nextPageLiveData: LiveData<Resource<Boolean>>? = null
+    class NextPageHandler(
+        private val repository: RepoRepository,
+        private val context: CoroutineContext
+    ) : CoroutineScope by CoroutineScope(context) {
+        private var nextPageJob: Job? = null
         val loadMoreState = MutableLiveData<LoadMoreState>()
         private var query: String? = null
         private var _hasMore: Boolean = false
@@ -98,55 +125,62 @@ class SearchViewModel @Inject constructor(repoRepository: RepoRepository) : View
             reset()
         }
 
-        fun queryNextPage(query: String) {
-            if (this.query == query) {
+        fun queryNextPage(nextQuery: String) {
+            if (query == nextQuery) {
                 return
             }
             unregister()
-            this.query = query
-            nextPageLiveData = repository.searchNextPage(query)
-            loadMoreState.value = LoadMoreState(
-                isRunning = true,
-                errorMessage = null
-            )
-            nextPageLiveData?.observeForever(this)
+            query = nextQuery
+
+            nextPageJob = launch {
+                loadMoreState.value = LoadMoreState(
+                    isRunning = true,
+                    errorMessage = null
+                )
+
+                repository.searchNextPage(nextQuery).collect { resource ->
+                    onChanged(resource)
+                }
+            }
         }
 
-        override fun onChanged(result: Resource<Boolean>?) {
-            if (result == null) {
-                reset()
-            } else {
-                when (result.status) {
-                    Status.SUCCESS -> {
-                        _hasMore = result.data == true
-                        unregister()
-                        loadMoreState.setValue(
-                            LoadMoreState(
-                                isRunning = false,
-                                errorMessage = null
-                            )
+        private fun onChanged(result: Resource<Boolean>) {
+            when (result.status) {
+                Status.SUCCESS -> {
+                    _hasMore = result.data ?: false
+                    unregister()
+                    loadMoreState.setValue(
+                        LoadMoreState(
+                            isRunning = false,
+                            errorMessage = null
                         )
-                    }
-                    Status.ERROR -> {
-                        _hasMore = true
-                        unregister()
-                        loadMoreState.setValue(
-                            LoadMoreState(
-                                isRunning = false,
-                                errorMessage = result.message
-                            )
+                    )
+                }
+                Status.ERROR -> {
+                    _hasMore = true
+                    unregister()
+                    loadMoreState.setValue(
+                        LoadMoreState(
+                            isRunning = false,
+                            errorMessage = result.message
                         )
-                    }
-                    Status.LOADING -> {
-                        // ignore
-                    }
+                    )
+                }
+
+                Status.NONE -> {
+                    reset()
+                }
+
+                Status.LOADING -> {
+                    // ignore
                 }
             }
         }
 
         private fun unregister() {
-            nextPageLiveData?.removeObserver(this)
-            nextPageLiveData = null
+            nextPageJob?.cancel()
+            nextPageJob = null
+
             if (_hasMore) {
                 query = null
             }

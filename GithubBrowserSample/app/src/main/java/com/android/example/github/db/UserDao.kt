@@ -16,12 +16,12 @@
 
 package com.android.example.github.db
 
-import androidx.lifecycle.LiveData
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.android.example.github.vo.User
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Interface for database access for User related operations.
@@ -32,5 +32,5 @@ interface UserDao {
     fun insert(user: User)
 
     @Query("SELECT * FROM user WHERE login = :login")
-    fun findByLogin(login: String): LiveData<User>
+    fun findByLogin(login: String): Flow<User>
 }

@@ -13,44 +13,47 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.android.example.github.util
 
-
-import androidx.lifecycle.LiveData
 import com.android.example.github.api.ApiResponse
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import retrofit2.Call
 import retrofit2.CallAdapter
 import retrofit2.Callback
 import retrofit2.Response
 import java.lang.reflect.Type
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * A Retrofit adapter that converts the Call into a LiveData of ApiResponse.
  * @param <R>
 </R> */
-class LiveDataCallAdapter<R>(private val responseType: Type) :
-    CallAdapter<R, LiveData<ApiResponse<R>>> {
+@ExperimentalCoroutinesApi
+internal class FlowCallAdapter<R>(
+    private val responseType: Type
+) : CallAdapter<R, Flow<ApiResponse<R>>> {
 
     override fun responseType() = responseType
 
-    override fun adapt(call: Call<R>): LiveData<ApiResponse<R>> {
-        return object : LiveData<ApiResponse<R>>() {
-            private var started = AtomicBoolean(false)
-            override fun onActive() {
-                super.onActive()
-                if (started.compareAndSet(false, true)) {
-                    call.enqueue(object : Callback<R> {
-                        override fun onResponse(call: Call<R>, response: Response<R>) {
-                            postValue(ApiResponse.create(response))
-                        }
-
-                        override fun onFailure(call: Call<R>, throwable: Throwable) {
-                            postValue(ApiResponse.create(throwable))
-                        }
-                    })
+    override fun adapt(call: Call<R>): Flow<ApiResponse<R>> {
+        return callbackFlow {
+            call.enqueue(object : Callback<R> {
+                override fun onResponse(call: Call<R>, response: Response<R>) {
+                    if (!this@callbackFlow.isClosedForSend) {
+                        val apiResponse = ApiResponse.create(response)
+                        offer(apiResponse)
+                    }
                 }
+
+                override fun onFailure(call: Call<R>, throwable: Throwable) {
+                    offer(ApiResponse.create(throwable))
+                }
+            })
+
+            awaitClose {
+                call.cancel()
             }
         }
     }
