@@ -18,8 +18,10 @@ package com.android.example.github.api
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.android.example.github.util.FlowCallAdapterFactory
-import com.android.example.github.util.LiveDataTestUtil.getValue
+import com.android.example.github.util.FlowTestUtil.getValue
 import com.android.example.github.vo.User
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okio.Okio
@@ -45,6 +47,7 @@ class GithubServiceTest {
 
     private lateinit var mockWebServer: MockWebServer
 
+    @ExperimentalCoroutinesApi
     @Before
     fun createService() {
         mockWebServer = MockWebServer()
@@ -62,7 +65,7 @@ class GithubServiceTest {
     }
 
     @Test
-    fun getUser() {
+    fun getUser() = runBlocking {
         enqueueResponse("user-yigit.json")
         val yigit = (getValue(service.getUser("yigit")) as ApiSuccessResponse).body
 
@@ -76,7 +79,7 @@ class GithubServiceTest {
     }
 
     @Test
-    fun getRepos() {
+    fun getRepos() = runBlocking {
         enqueueResponse("repos-yigit.json")
         val repos = (getValue(service.getRepos("yigit")) as ApiSuccessResponse).body
 
@@ -98,7 +101,7 @@ class GithubServiceTest {
     }
 
     @Test
-    fun getContributors() {
+    fun getContributors() = runBlocking {
         enqueueResponse("contributors.json")
         val value = getValue(service.getContributors("foo", "bar"))
         val contributors = (value as ApiSuccessResponse).body
@@ -112,7 +115,7 @@ class GithubServiceTest {
     }
 
     @Test
-    fun search() {
+    fun search() = runBlocking {
         val next = """<https://api.github.com/search/repositories?q=foo&page=2>; rel="next""""
         val last = """<https://api.github.com/search/repositories?q=foo&page=34>; rel="last""""
         enqueueResponse(

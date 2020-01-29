@@ -27,7 +27,6 @@ import com.android.example.github.vo.Repo
 import com.android.example.github.vo.RepoSearchResult
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.transformLatest
 import java.util.Collections
 
 /**
@@ -51,7 +50,7 @@ abstract class RepoDao {
     abstract fun createRepoIfNotExists(repo: Repo): Long
 
     @Query("SELECT * FROM repo WHERE owner_login = :ownerLogin AND name = :name")
-    abstract fun load(ownerLogin: String, name: String): Flow<Repo>
+    abstract fun load(ownerLogin: String, name: String): Flow<Repo?>
 
     @Query(
         """
@@ -59,7 +58,7 @@ abstract class RepoDao {
         WHERE repoName = :name AND repoOwner = :owner
         ORDER BY contributions DESC"""
     )
-    abstract fun loadContributors(owner: String, name: String): Flow<List<Contributor>>
+    abstract fun loadContributors(owner: String, name: String): Flow<List<Contributor>?>
 
     @Query(
         """
@@ -75,25 +74,23 @@ abstract class RepoDao {
     @Query("SELECT * FROM RepoSearchResult WHERE `query` = :query")
     abstract fun search(query: String): Flow<RepoSearchResult?>
 
-    suspend fun loadOrdered(repoIds: List<Int>): Flow<List<Repo>> {
+    suspend fun loadOrdered(repoIds: List<Int>): List<Repo> {
         val order = SparseIntArray()
         repoIds.withIndex().forEach {
             order.put(it.value, it.index)
         }
 
-        return loadById(repoIds).transformLatest { repositories ->
-            Collections.sort(repositories) { r1, r2 ->
+        return loadById(repoIds).apply {
+            Collections.sort(this) { r1, r2 ->
                 val pos1 = order.get(r1.id)
                 val pos2 = order.get(r2.id)
                 pos1 - pos2
             }
-
-            emit(repositories)
         }
     }
 
     @Query("SELECT * FROM Repo WHERE id in (:repoIds)")
-    protected abstract fun loadById(repoIds: List<Int>): Flow<List<Repo>>
+    protected abstract suspend fun loadById(repoIds: List<Int>): List<Repo>
 
     @Query("SELECT * FROM RepoSearchResult WHERE `query` = :query")
     abstract fun findSearchResult(query: String): RepoSearchResult?

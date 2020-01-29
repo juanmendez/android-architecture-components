@@ -66,7 +66,7 @@ class SearchViewModel @Inject constructor(private val repoRepository: RepoReposi
 
             _results.asFlow = if (search.isNullOrBlank()) {
                 flow {
-                    emit(Resource.success(listOf()))
+                    emit(Resource.success(null))
                 }
             } else {
                 repoRepository.search(search)

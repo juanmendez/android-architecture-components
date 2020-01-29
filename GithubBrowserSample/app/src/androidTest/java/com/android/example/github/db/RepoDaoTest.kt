@@ -19,8 +19,9 @@ package com.android.example.github.db
 import android.database.sqlite.SQLiteException
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.test.runner.AndroidJUnit4
-import com.android.example.github.util.LiveDataTestUtil.getValue
+import com.android.example.github.util.FlowTestUtil.getValue
 import com.android.example.github.util.TestUtil
+import kotlinx.coroutines.runBlocking
 import org.hamcrest.CoreMatchers.`is`
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.MatcherAssert.assertThat
@@ -35,7 +36,7 @@ class RepoDaoTest : DbTest() {
     var instantTaskExecutorRule = InstantTaskExecutorRule()
 
     @Test
-    fun insertAndRead() {
+    fun insertAndRead() = runBlocking {
         val repo = TestUtil.createRepo("foo", "bar", "desc")
         db.repoDao().insert(repo)
         val loaded = getValue(db.repoDao().load("foo", "bar"))
@@ -59,7 +60,7 @@ class RepoDaoTest : DbTest() {
     }
 
     @Test
-    fun insertContributors() {
+    fun insertContributors() = runBlocking {
         val repo = TestUtil.createRepo("foo", "bar", "desc")
         val c1 = TestUtil.createContributor(repo, "c1", 3)
         val c2 = TestUtil.createContributor(repo, "c2", 7)
@@ -97,7 +98,7 @@ class RepoDaoTest : DbTest() {
     }
 
     @Test
-    fun insertContributorsThenUpdateRepo() {
+    fun insertContributorsThenUpdateRepo() = runBlocking {
         val repo = TestUtil.createRepo("foo", "bar", "desc")
         db.repoDao().insert(repo)
         val contributor = TestUtil.createContributor(repo, "aa", 3)

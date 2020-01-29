@@ -16,12 +16,18 @@
 
 package com.android.example.github.util
 
-import com.android.example.github.AppExecutors
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.single
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.runBlocking
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
-import java.util.concurrent.Executor
-
-class InstantAppExecutors : AppExecutors(instant, instant, instant) {
-    companion object {
-        private val instant = Executor { it.run() }
+object FlowTestUtil {
+    // TODO: find a cleaner way to write this
+    suspend fun <T> getValue(flow: Flow<T>): T = suspendCoroutine { continuation ->
+        runBlocking {
+            continuation.resume(flow.take(1).single())
+        }
     }
 }

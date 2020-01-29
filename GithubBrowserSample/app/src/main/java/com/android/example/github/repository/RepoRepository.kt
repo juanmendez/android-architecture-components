@@ -16,6 +16,7 @@
 
 package com.android.example.github.repository
 
+import com.android.example.github.api.ApiResponse
 import com.android.example.github.api.ApiSuccessResponse
 import com.android.example.github.api.GithubService
 import com.android.example.github.api.RepoSearchResponse
@@ -30,8 +31,7 @@ import com.android.example.github.vo.Resource
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapMerge
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.transformLatest
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -124,7 +124,9 @@ class RepoRepository @Inject constructor(
 
             override fun loadFromDb() = repoDao.loadContributors(owner, name)
 
-            override suspend fun createCall() = githubService.getContributors(owner, name)
+            override suspend fun createCall(): Flow<ApiResponse<List<Contributor>>> {
+                return githubService.getContributors(owner, name)
+            }
         }.asFlow()
     }
 
@@ -158,14 +160,12 @@ class RepoRepository @Inject constructor(
                 return data == null || data.isEmpty()
             }
 
-            override fun loadFromDb(): Flow<List<Repo>> {
-                return repoDao.search(query).flatMapMerge { searchData ->
+            override fun loadFromDb(): Flow<List<Repo>?> {
+                return repoDao.search(query).transformLatest { searchData ->
                     if (searchData == null) {
-                        flow {
-                            emit(listOf())
-                        }
+                        emit(null)
                     } else {
-                        repoDao.loadOrdered(searchData.repoIds)
+                        emit(repoDao.loadOrdered(searchData.repoIds))
                     }
                 }
             }

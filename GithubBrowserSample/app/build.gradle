@@ -103,7 +103,10 @@ dependencies {
     testImplementation deps.mock_web_server
     testImplementation deps.arch_core.testing
     testImplementation deps.mockito.core
+    testImplementation deps.mockito.kotlin
+    testImplementation deps.coroutines.core
     testImplementation deps.coroutines.testing
+    testImplementation deps.viewModel.ktx
 
     androidTestImplementation deps.atsl.runner
     androidTestImplementation deps.atsl.rules

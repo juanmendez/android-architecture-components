@@ -25,8 +25,10 @@ import com.android.example.github.vo.RepoSearchResult
 import com.android.example.github.vo.Resource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.withContext
 
 /**
@@ -42,41 +44,51 @@ class FetchNextSearchPageTask(
             db.repoDao().findSearchResult(query)
         }
 
-        return if (current?.next != null) {
-            githubService.searchRepos(query, current.next).map { apiResponse ->
-                when (apiResponse) {
-                    is ApiSuccessResponse -> {
-                        // we merge all repo ids into 1 list so that it is easier to fetch the
-                        // result list.
-                        val ids = arrayListOf<Int>()
-                        ids.addAll(current.repoIds)
-
-                        ids.addAll(apiResponse.body.items.map { it.id })
-                        val merged = RepoSearchResult(
-                            query, ids,
-                            apiResponse.body.total, apiResponse.nextPage
-                        )
-
-                        withContext(Dispatchers.IO) {
-                            db.runInTransaction {
-                                db.repoDao().insert(merged)
-                                db.repoDao().insertRepos(apiResponse.body.items)
-                            }
-                        }
-
-                        Resource.success(apiResponse.nextPage != null)
+        return callbackFlow {
+            if (current?.next != null) {
+                try {
+                    searchRepos(current.next, current).take(1).collect {
+                        offer(it)
                     }
-                    is ApiEmptyResponse -> {
-                        Resource.success(false)
-                    }
-                    is ApiErrorResponse -> {
-                        Resource.error(apiResponse.errorMessage, true)
-                    }
+                } catch (e: Exception) {
+                    offer(Resource.error(e.message ?: "", true))
                 }
+            } else {
+                offer(Resource.none())
             }
-        } else {
-            flow {
-                emit(Resource.none())
+        }
+    }
+
+    private fun searchRepos(next: Int, current: RepoSearchResult): Flow<Resource<Boolean>> {
+        return githubService.searchRepos(query, next).map { apiResponse ->
+            when (apiResponse) {
+                is ApiSuccessResponse -> {
+                    // we merge all repo ids into 1 list so that it is easier to fetch the
+                    // result list.
+                    val ids = arrayListOf<Int>()
+                    ids.addAll(current.repoIds)
+
+                    ids.addAll(apiResponse.body.items.map { it.id })
+                    val merged = RepoSearchResult(
+                        query, ids,
+                        apiResponse.body.total, apiResponse.nextPage
+                    )
+
+                    withContext(Dispatchers.IO) {
+                        db.runInTransaction {
+                            db.repoDao().insert(merged)
+                            db.repoDao().insertRepos(apiResponse.body.items)
+                        }
+                    }
+
+                    Resource.success(apiResponse.nextPage != null)
+                }
+                is ApiEmptyResponse -> {
+                    Resource.success(false)
+                }
+                is ApiErrorResponse -> {
+                    Resource.error(apiResponse.errorMessage, true)
+                }
             }
         }
     }

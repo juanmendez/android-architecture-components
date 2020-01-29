@@ -46,10 +46,9 @@ abstract class NetworkBoundResource<ResultType, RequestType> {
     suspend fun asFlow(): Flow<Resource<ResultType>> {
         return loadFromDb().transformLatest { dbValue ->
             if (shouldFetch(dbValue)) {
-                emit(Resource.loading(null))
+                emit(Resource.loading(dbValue))
 
                 createCall().collect { apiResponse ->
-
                     when (apiResponse) {
                         is ApiSuccessResponse -> {
                             withContext(Dispatchers.IO) {
@@ -88,7 +87,7 @@ abstract class NetworkBoundResource<ResultType, RequestType> {
     protected abstract fun shouldFetch(data: ResultType?): Boolean
 
     @MainThread
-    protected abstract fun loadFromDb(): Flow<ResultType>
+    protected abstract fun loadFromDb(): Flow<ResultType?>
 
     @MainThread
     protected abstract suspend fun createCall(): Flow<ApiResponse<RequestType>>

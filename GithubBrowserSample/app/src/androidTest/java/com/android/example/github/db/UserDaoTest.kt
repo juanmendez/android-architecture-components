@@ -18,8 +18,9 @@ package com.android.example.github.db
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.test.runner.AndroidJUnit4
-import com.android.example.github.util.LiveDataTestUtil.getValue
+import com.android.example.github.util.FlowTestUtil.getValue
 import com.android.example.github.util.TestUtil
+import kotlinx.coroutines.runBlocking
 import org.hamcrest.CoreMatchers.`is`
 import org.hamcrest.MatcherAssert.assertThat
 import org.junit.Rule
@@ -33,7 +34,7 @@ class UserDaoTest : DbTest() {
     var instantTaskExecutorRule = InstantTaskExecutorRule()
 
     @Test
-    fun insertAndLoad() {
+    fun insertAndLoad() = runBlocking {
         val user = TestUtil.createUser("foo")
         db.userDao().insert(user)
 
